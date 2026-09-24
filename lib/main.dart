@@ -1,5 +1,5 @@
-
 import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -38,6 +38,7 @@ class _MyHomePageState extends State<MyHomePage>
   int _intentos = 0;
   int _intentosRestantes = 7;
   String _mensaje = '';
+  final List<int> _historialIntentos = [];
 
   final TextEditingController _controller = TextEditingController();
 
@@ -55,13 +56,19 @@ class _MyHomePageState extends State<MyHomePage>
   int get _maxNumero => _modoDificil ? 200 : 50;
   int get _maxIntentos => _modoDificil ? 4 : 7;
 
+  Color _getProgressColor() {
+    final double progreso = _intentosRestantes / _maxIntentos;
+    if (progreso > 0.5) return Colors.green;
+    if (progreso > 0.25) return Colors.orange;
+    return Colors.red;
+  }
+
   final List<String> _mensajesIniciales = [
-  '🎯 ¿Podrás adivinar el número? (5 intentos)',
-  '🔮 Concéntrate... solo 5 oportunidades',
-  '✨ La suerte está de tu lado - 5 intentos',
-  '🌟 Adivina el número secreto en 5 intentos',
-];
-  
+    '🎯 ¿Podrás adivinar el número? (5 intentos)',
+    '🔮 Concéntrate... solo 5 oportunidades',
+    '✨ La suerte está de tu lado - 5 intentos',
+    '🌟 Adivina el número secreto en 5 intentos',
+  ];
 
   @override
   void initState() {
@@ -77,24 +84,16 @@ class _MyHomePageState extends State<MyHomePage>
       curve: Curves.easeIn,
     );
 
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.3),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeOutCubic,
-      ),
-    );
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: Curves.easeOutCubic,
+          ),
+        );
 
-    _bounceAnimation = Tween<double>(
-      begin: 1.0,
-      end: 1.3,
-    ).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.elasticOut,
-      ),
+    _bounceAnimation = Tween<double>(begin: 1.0, end: 1.3).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.elasticOut),
     );
 
     _cargarRecord();
@@ -126,8 +125,9 @@ class _MyHomePageState extends State<MyHomePage>
       _numeroSecreto = Random().nextInt(_maxNumero) + 1;
       _intentos = 0;
       _intentosRestantes = _maxIntentos;
-      _mensaje = _mensajesIniciales[
-          Random().nextInt(_mensajesIniciales.length)];
+      _mensaje =
+          _mensajesIniciales[Random().nextInt(_mensajesIniciales.length)];
+      _historialIntentos.clear();
       _juegoTerminado = false;
       _juegoPerdido = false;
       _controller.clear();
@@ -143,18 +143,13 @@ class _MyHomePageState extends State<MyHomePage>
     final String texto = _controller.text.trim();
 
     if (texto.isEmpty) {
-      _mostrarMensajeTemporal(
-        '📝 ¡Ingresa un número!',
-        Colors.orange,
-      );
+      _mostrarMensajeTemporal('📝 ¡Ingresa un número!', Colors.orange);
       return;
     }
 
     final int? adivinanza = int.tryParse(texto);
 
-    if (adivinanza == null ||
-        adivinanza < 1 ||
-        adivinanza > _maxNumero) {
+    if (adivinanza == null || adivinanza < 1 || adivinanza > _maxNumero) {
       _mostrarMensajeTemporal(
         '⚠️ Solo números entre 1 y $_maxNumero',
         Colors.orange,
@@ -165,6 +160,7 @@ class _MyHomePageState extends State<MyHomePage>
     setState(() {
       _intentos++;
       _intentosRestantes--;
+      _historialIntentos.add(adivinanza);
       _controller.clear();
 
       if (adivinanza == _numeroSecreto) {
@@ -175,16 +171,34 @@ class _MyHomePageState extends State<MyHomePage>
 
         _guardarRecord(_intentos);
       } else if (_intentosRestantes == 0) {
-        _mensaje =
-            '💀 ¡GAME OVER! 💀\nEl número secreto era $_numeroSecreto';
+        _mensaje = '💀 ¡GAME OVER! 💀\nEl número secreto era $_numeroSecreto';
 
         _juegoPerdido = true;
       } else if (adivinanza < _numeroSecreto) {
-        _mensaje =
-            '🔼 ¡Más alto! (Te quedan $_intentosRestantes intentos)';
+        _mensaje = '🔼 ¡Más alto! (Te quedan $_intentosRestantes intentos)';
       } else {
-        _mensaje =
-            '🔽 ¡Más bajo! (Te quedan $_intentosRestantes intentos)';
+        _mensaje = '🔽 ¡Más bajo! (Te quedan $_intentosRestantes intentos)';
+      }
+    });
+
+    _animationController.reset();
+    _animationController.forward();
+  }
+
+  void _usarPista() {
+    if (_juegoTerminado || _juegoPerdido) return;
+
+    setState(() {
+      _intentosRestantes--;
+      if (_numeroSecreto.isEven) {
+        _mensaje = '💡 Pista: el número secreto es PAR';
+      } else {
+        _mensaje = '💡 Pista: el número secreto es IMPAR';
+      }
+
+      if (_intentosRestantes == 0) {
+        _mensaje = '💀 ¡GAME OVER! 💀\nEl número secreto era $_numeroSecreto';
+        _juegoPerdido = true;
       }
     });
 
@@ -198,9 +212,7 @@ class _MyHomePageState extends State<MyHomePage>
         content: Text(mensaje),
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         duration: const Duration(seconds: 2),
       ),
     );
@@ -224,16 +236,18 @@ class _MyHomePageState extends State<MyHomePage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('Adivina el Número'),
+        centerTitle: true,
+        backgroundColor: Colors.teal,
+        foregroundColor: Colors.white,
+      ),
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Colors.teal.shade50,
-              Colors.white,
-              Colors.teal.shade50,
-            ],
+            colors: [Colors.teal.shade50, Colors.white, Colors.teal.shade50],
           ),
         ),
         child: SafeArea(
@@ -247,6 +261,41 @@ class _MyHomePageState extends State<MyHomePage>
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: Colors.teal.shade100),
+                        ),
+                        child: const Column(
+                          children: [
+                            Text(
+                              '¿Cómo se juega?',
+                              style: TextStyle(
+                                fontSize: 21,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.teal,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              'Piensa en un número secreto entre 1 y 50. Escribe tu intento y descubre si debes buscar un número más alto o más bajo. ¡Adivínalo antes de quedarte sin intentos!',
+                              style: TextStyle(
+                                fontSize: 16,
+                                height: 1.4,
+                                color: Colors.black87,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+
                       // Header con animación
                       Container(
                         padding: const EdgeInsets.all(20),
@@ -267,14 +316,14 @@ class _MyHomePageState extends State<MyHomePage>
                             _juegoPerdido
                                 ? Icons.sentiment_dissatisfied
                                 : (_juegoTerminado
-                                    ? Icons.emoji_events
-                                    : Icons.psychology_alt),
+                                      ? Icons.emoji_events
+                                      : Icons.psychology_alt),
                             size: 60,
                             color: _juegoPerdido
                                 ? Colors.red
                                 : (_juegoTerminado
-                                    ? Colors.green
-                                    : Colors.teal),
+                                      ? Colors.green
+                                      : Colors.teal),
                           ),
                         ),
                       ),
@@ -284,9 +333,7 @@ class _MyHomePageState extends State<MyHomePage>
                       // Contenedor del mensaje principal
                       AnimatedContainer(
                         duration: const Duration(milliseconds: 500),
-                        padding: EdgeInsets.all(
-                          _juegoTerminado ? 30 : 20,
-                        ),
+                        padding: EdgeInsets.all(_juegoTerminado ? 30 : 20),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(
@@ -323,9 +370,7 @@ class _MyHomePageState extends State<MyHomePage>
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: !_modoDificil
-                                  ? Colors.teal
-                                  : Colors.grey,
+                              color: !_modoDificil ? Colors.teal : Colors.grey,
                             ),
                           ),
                           Switch(
@@ -343,9 +388,7 @@ class _MyHomePageState extends State<MyHomePage>
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: _modoDificil
-                                  ? Colors.red
-                                  : Colors.grey,
+                              color: _modoDificil ? Colors.red : Colors.grey,
                             ),
                           ),
                         ],
@@ -408,6 +451,28 @@ class _MyHomePageState extends State<MyHomePage>
                         ),
                       ),
 
+                      const SizedBox(height: 12),
+
+                      LinearProgressIndicator(
+                        value: _intentosRestantes / _maxIntentos,
+                        minHeight: 10,
+                        backgroundColor: Colors.grey.shade200,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          _getProgressColor(),
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+
+                      const SizedBox(height: 6),
+
+                      Text(
+                        'Progreso de intentos',
+                        style: TextStyle(
+                          color: _getProgressColor(),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+
                       const SizedBox(height: 15),
 
                       // Récord actual
@@ -428,6 +493,80 @@ class _MyHomePageState extends State<MyHomePage>
 
                       const SizedBox(height: 20),
 
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed:
+                              (_juegoTerminado ||
+                                  _juegoPerdido ||
+                                  _intentosRestantes == 0)
+                              ? null
+                              : _usarPista,
+                          icon: const Icon(Icons.lightbulb_outline),
+                          label: const Text('Pista: ¿es par o impar?'),
+                        ),
+                      ),
+
+                      if (_historialIntentos.isNotEmpty) ...[
+                        const SizedBox(height: 20),
+                        const Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'Historial de intentos',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.teal,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          constraints: const BoxConstraints(maxHeight: 130),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.85),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: _historialIntentos.length,
+                            itemBuilder: (context, index) {
+                              final intento = _historialIntentos[index];
+                              final esMuyAlto = intento > _numeroSecreto;
+                              final color = esMuyAlto
+                                  ? Colors.red
+                                  : Colors.blue;
+                              final indicacion = esMuyAlto
+                                  ? 'Muy alto'
+                                  : 'Muy bajo';
+
+                              return ListTile(
+                                dense: true,
+                                leading: Icon(
+                                  esMuyAlto
+                                      ? Icons.arrow_downward
+                                      : Icons.arrow_upward,
+                                  color: color,
+                                ),
+                                title: Text(
+                                  'Intento ${index + 1}: $intento',
+                                  style: TextStyle(
+                                    color: color,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                trailing: Text(
+                                  indicacion,
+                                  style: TextStyle(color: color),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+
+                      const SizedBox(height: 20),
+
                       // Campo de texto
                       Container(
                         decoration: BoxDecoration(
@@ -444,14 +583,11 @@ class _MyHomePageState extends State<MyHomePage>
                           controller: _controller,
                           keyboardType: TextInputType.number,
                           textAlign: TextAlign.center,
-                          enabled:
-                              !_juegoTerminado && !_juegoPerdido,
+                          enabled: !_juegoTerminado && !_juegoPerdido,
                           style: const TextStyle(fontSize: 18),
                           decoration: InputDecoration(
                             hintText: 'Escribe tu número aquí',
-                            hintStyle: TextStyle(
-                              color: Colors.grey.shade400,
-                            ),
+                            hintStyle: TextStyle(color: Colors.grey.shade400),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(15),
                               borderSide: BorderSide.none,
@@ -475,8 +611,7 @@ class _MyHomePageState extends State<MyHomePage>
                                   )
                                 : null,
                           ),
-                          onSubmitted: (_) =>
-                              _verificarAdivinanza(),
+                          onSubmitted: (_) => _verificarAdivinanza(),
                         ),
                       ),
 
@@ -487,46 +622,39 @@ class _MyHomePageState extends State<MyHomePage>
                         width: double.infinity,
                         height: 60,
                         child: ElevatedButton(
-                          onPressed:
-                              (_juegoTerminado || _juegoPerdido)
-                                  ? null
-                                  : _verificarAdivinanza,
+                          onPressed: (_juegoTerminado || _juegoPerdido)
+                              ? null
+                              : _verificarAdivinanza,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: _juegoTerminado
                                 ? Colors.green
-                                : (_juegoPerdido
-                                    ? Colors.red
-                                    : Colors.teal),
+                                : (_juegoPerdido ? Colors.red : Colors.teal),
                             foregroundColor: Colors.white,
                             disabledBackgroundColor: _juegoTerminado
                                 ? Colors.green.shade100
                                 : (_juegoPerdido
-                                    ? Colors.red.shade100
-                                    : Colors.teal.shade100),
+                                      ? Colors.red.shade100
+                                      : Colors.teal.shade100),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(15),
                             ),
                             elevation: 5,
                           ),
                           child: Row(
-                            mainAxisAlignment:
-                                MainAxisAlignment.center,
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(
                                 _juegoTerminado
                                     ? Icons.emoji_events
                                     : (_juegoPerdido
-                                        ? Icons
-                                            .sentiment_very_dissatisfied
-                                        : Icons.check_circle_outline),
+                                          ? Icons.sentiment_very_dissatisfied
+                                          : Icons.check_circle_outline),
                               ),
                               const SizedBox(width: 10),
                               Text(
                                 _juegoTerminado
                                     ? '¡Felicidades!'
-                                    : (_juegoPerdido
-                                        ? 'Perdiste'
-                                        : 'Adivinar'),
+                                    : (_juegoPerdido ? 'Perdiste' : 'Adivinar'),
                                 style: const TextStyle(
                                   fontSize: 20,
                                   fontWeight: FontWeight.bold,
@@ -542,18 +670,10 @@ class _MyHomePageState extends State<MyHomePage>
                       // Botón de reinicio con animación
                       if (_juegoTerminado || _juegoPerdido)
                         TweenAnimationBuilder(
-                          duration:
-                              const Duration(milliseconds: 500),
-                          tween: Tween<double>(
-                            begin: 0,
-                            end: 1,
-                          ),
-                          builder:
-                              (context, double value, child) {
-                            return Transform.scale(
-                              scale: value,
-                              child: child,
-                            );
+                          duration: const Duration(milliseconds: 500),
+                          tween: Tween<double>(begin: 0, end: 1),
+                          builder: (context, double value, child) {
+                            return Transform.scale(scale: value, child: child);
                           },
                           child: OutlinedButton.icon(
                             onPressed: _iniciarJuego,
@@ -564,11 +684,9 @@ class _MyHomePageState extends State<MyHomePage>
                                 width: 2,
                               ),
                               shape: RoundedRectangleBorder(
-                                borderRadius:
-                                    BorderRadius.circular(15),
+                                borderRadius: BorderRadius.circular(15),
                               ),
-                              padding:
-                                  const EdgeInsets.symmetric(
+                              padding: const EdgeInsets.symmetric(
                                 horizontal: 30,
                                 vertical: 15,
                               ),
@@ -594,4 +712,3 @@ class _MyHomePageState extends State<MyHomePage>
     );
   }
 }
-
